@@ -5,18 +5,19 @@ description = "Fetch podcast episodes, transcribe locally, summarize with Claude
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic>=0.40",
-    "feedparser>=6.0",
+    "anthropic>=1.0",
+    "defusedxml>=0.7",
     "httpx>=0.27",
     "pydantic>=2.7",
     "pyyaml>=6.0",
     "tenacity>=8.2",
-    "python-slugify>=8.0",
 ]
 
 [project.optional-dependencies]
-local = ["faster-whisper>=1.0"]
-deepgram = ["deepgram-sdk>=3.0"]
+# Apple Silicon: Whisper on the Mac GPU via MLX (needs `brew install ffmpeg`).
+mac = ["mlx-whisper>=0.4"]
+# Any platform: CTranslate2 Whisper (CPU, or NVIDIA GPU).
+local = ["faster-whisper>=1.1"]
 dev = ["pytest>=8", "ruff>=0.5"]
 
 [project.scripts]
@@ -31,3 +32,9 @@ packages = ["src/podcast_digest"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,28 +1,45 @@
 # Copy to config.yaml (git-ignored) and edit.
-output_dir: ~/Obsidian/Vault/Podcasts     # one .md per episode + Weekly/ digests
-data_dir: ./data                           # SQLite state, audio cache, raw transcripts
+output_dir: ~/Obsidian/Vault/Podcasts   # <Podcast>/<date> <title>.md, Transcripts/, Digests/
+data_dir: ./data                         # SQLite state, audio cache, transcripts, logs
 
+# Used by `podcast-digest run` (new episodes since last run) and `podcast-digest list`.
 feeds:
   - name: The Tim Ferriss Show
     url: https://rss.art19.com/tim-ferriss-show
+    # since: 2026-09-01     # ignore older episodes (default: first run takes only the latest)
     # max_new_per_run: 3
-    # since: 2026-09-01                    # ignore older episodes on first run
 
+# The first interest gets the deepest treatment in every summary.
 interests:
   - Building a solo AI agent security consulting practice
-  - Productivity systems and deep work
-  # - add your own
+  # - Health and longevity
+  # - Investing
 
 transcription:
-  engine: faster-whisper                   # faster-whisper | deepgram
-  model: large-v3                          # tiny/base/small/medium/large-v3/distil-large-v3
-  device: auto                             # auto | cpu | cuda
-  compute_type: auto                       # e.g. int8 on CPU, float16 on GPU
-  fallback: deepgram                       # used if local transcription fails
+  engine: auto               # auto | mlx-whisper | faster-whisper | deepgram
+  fallback: deepgram         # used if the primary engine fails (needs DEEPGRAM_API_KEY)
+  prefer_published: true     # use <podcast:transcript> from the feed when it has timestamps
+  allow_untimed_published: false
+  # language: en
+  # mlx_model: mlx-community/whisper-large-v3-turbo
+  # faster_whisper_model: large-v3-turbo
+  # deepgram_model: nova-3
+  # deepgram_usd_per_minute: 0.0043
 
 summarization:
   model: claude-sonnet-5
-  max_chunk_tokens: 60000
+  # digest_model: claude-opus-5
+  effort: medium             # low | medium | high | xhigh | max
+  max_chunk_tokens: 80000    # longer transcripts are summarized in parts, then merged
+  # max_output_tokens: 16000
+  # max_retries: 5
+  # prices:                  # USD per 1M tokens, for the cost log
+  #   claude-sonnet-5: {input: 2.0, output: 10.0}
+
+output:
+  wikilink_resources: true   # [[Book]] links for books/tools/apps
+  write_transcript_notes: true
+  tags: [podcast]
 
 # Secrets come from environment variables, never this file:
-#   ANTHROPIC_API_KEY, DEEPGRAM_API_KEY
+#   ANTHROPIC_API_KEY (or `ant auth login`), DEEPGRAM_API_KEY
