@@ -1,0 +1,28 @@
+# Copy to config.yaml (git-ignored) and edit.
+output_dir: ~/Obsidian/Vault/Podcasts     # one .md per episode + Weekly/ digests
+data_dir: ./data                           # SQLite state, audio cache, raw transcripts
+
+feeds:
+  - name: The Tim Ferriss Show
+    url: https://rss.art19.com/tim-ferriss-show
+    # max_new_per_run: 3
+    # since: 2026-09-01                    # ignore older episodes on first run
+
+interests:
+  - Building a solo AI agent security consulting practice
+  - Productivity systems and deep work
+  # - add your own
+
+transcription:
+  engine: faster-whisper                   # faster-whisper | deepgram
+  model: large-v3                          # tiny/base/small/medium/large-v3/distil-large-v3
+  device: auto                             # auto | cpu | cuda
+  compute_type: auto                       # e.g. int8 on CPU, float16 on GPU
+  fallback: deepgram                       # used if local transcription fails
+
+summarization:
+  model: claude-sonnet-5
+  max_chunk_tokens: 60000
+
+# Secrets come from environment variables, never this file:
+#   ANTHROPIC_API_KEY, DEEPGRAM_API_KEY
