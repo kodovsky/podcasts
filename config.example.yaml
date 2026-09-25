@@ -32,7 +32,7 @@ summarization:
   # claude-code: runs `claude -p` on your Claude subscription (no API key needed)
   # api:         Claude API, pay per token (needs ANTHROPIC_API_KEY)
   backend: claude-code
-  claude_code_model: sonnet  # sonnet | opus | haiku
+  # claude_code_model: claude-sonnet-5   # default: whatever `claude` uses for your account
   model: claude-sonnet-5     # used by backend: api
   # digest_model: claude-opus-5
   effort: medium             # low | medium | high | xhigh | max

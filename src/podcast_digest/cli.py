@@ -17,10 +17,12 @@ def _setup_logging(log_dir: Path, verbose: bool) -> None:
     fmt = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
     file_handler = logging.FileHandler(log_dir / "podcast-digest.log")
     file_handler.setFormatter(logging.Formatter(fmt))
+    file_handler.setLevel(logging.DEBUG)  # tracebacks land here
     console = logging.StreamHandler(sys.stderr)
     console.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
+    console.setLevel(logging.DEBUG if verbose else logging.INFO)
     root = logging.getLogger()
-    root.setLevel(logging.DEBUG if verbose else logging.INFO)
+    root.setLevel(logging.DEBUG)
     root.addHandler(file_handler)
     root.addHandler(console)
     for noisy in ("httpx", "httpcore", "anthropic", "huggingface_hub", "filelock", "urllib3"):
@@ -129,7 +131,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  published: {episode.published}  audio: {episode.audio_url}")
                 print(f"  transcripts in feed: {[t.type for t in episode.transcripts] or 'none'}")
                 return 0
-            path = process_episode(episode, cfg, db, force=args.force, engine=args.engine)
+            try:
+                path = process_episode(episode, cfg, db, force=args.force, engine=args.engine)
+            except Exception:
+                print(f"Failed; details in {cfg.log_dir / 'podcast-digest.log'}", file=sys.stderr)
+                return 1
             if path:
                 print(path)
         elif args.command == "run":

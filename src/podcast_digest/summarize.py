@@ -328,11 +328,11 @@ class Summarizer:
             "json",
             "--json-schema",
             json.dumps(output_format.model_json_schema()),
-            "--model",
-            self.sc.claude_code_model,
             "--permission-mode",
             "dontAsk",
         ]
+        if self.sc.claude_code_model:
+            cmd += ["--model", self.sc.claude_code_model]
         # Without ANTHROPIC_API_KEY, `claude -p` uses the subscription login instead of the API.
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         t0 = time.time()
@@ -350,15 +350,15 @@ class Summarizer:
                 )
             except subprocess.TimeoutExpired as e:
                 raise _RetryableOutput(f"claude -p timed out after {e.timeout}s") from e
-        if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout).strip()[-800:]
-            raise _RetryableOutput(f"claude -p exited {proc.returncode}: {detail}")
         try:
             data = json.loads(proc.stdout)
-        except json.JSONDecodeError as e:
-            raise _RetryableOutput(f"claude -p returned non-JSON: {proc.stdout[:300]}") from e
-        if data.get("is_error"):
-            raise _RetryableOutput(f"claude -p error: {data.get('result') or data}")
+        except json.JSONDecodeError:
+            data = None
+        if proc.returncode != 0 or data is None or data.get("is_error"):
+            message = (data or {}).get("result") or (proc.stderr or proc.stdout).strip()[-800:]
+            if _is_permanent_claude_code_error(message):
+                raise SummaryError(f"Claude Code: {message}")
+            raise _RetryableOutput(f"claude -p exited {proc.returncode}: {message}")
 
         raw = data.get("structured_output")
         if raw is None:  # fall back to JSON in the text result
@@ -374,7 +374,7 @@ class Summarizer:
             episode_id=episode_id,
             stage=stage,
             provider="claude-code",
-            model=self.sc.claude_code_model,
+            model=self.sc.claude_code_model or "default",
             cost_usd=0.0,  # covered by the subscription
             input_tokens=int(usage.get("input_tokens") or 0),
             output_tokens=int(usage.get("output_tokens") or 0),
@@ -383,7 +383,7 @@ class Summarizer:
         )
         log.info(
             "Claude Code (%s) [%s]: done in %.0fs on your subscription (API-equivalent ~$%.3f)",
-            self.sc.claude_code_model,
+            self.sc.claude_code_model or "default model",
             stage,
             time.time() - t0,
             estimate,
@@ -456,6 +456,21 @@ CLAUDE_CODE_INSTRUCTION = (
     "The piped input contains your instructions followed by the material to process. "
     "Follow them. Do not use any tools; answer only with the structured output."
 )
+
+
+_PERMANENT_ERRORS = (
+    "issue with the selected model",  # unknown model / no access
+    "invalid api key",
+    "not logged in",
+    "/login",
+    "credit balance",
+)
+
+
+def _is_permanent_claude_code_error(message: str) -> bool:
+    """Errors that retrying won't fix (bad model, no login); fail fast with the message."""
+    low = message.lower()
+    return any(p in low for p in _PERMANENT_ERRORS)
 
 
 def _extract_json(text: str) -> object:

@@ -67,7 +67,7 @@ def test_claude_code_backend(cc_cfg, db, tmp_path, monkeypatch):
     (call,) = calls(log_path)
     args = call["args"]
     assert args[0] == "-p" and "--json-schema" in args and "--output-format" in args
-    assert args[args.index("--model") + 1] == "sonnet"
+    assert "--model" not in args  # default: Claude Code picks the model
     assert json.loads(args[args.index("--json-schema") + 1])["title"] == "EpisodeSummary"
     assert not call["has_key"]  # subscription, not the API key
     assert "podcasts" not in call["cwd"] or call["cwd"].startswith("/tmp")
@@ -99,3 +99,25 @@ def test_missing_claude_is_a_clear_error(cc_cfg, db, monkeypatch):
     monkeypatch.setenv("PATH", "/nonexistent")
     with pytest.raises(SummaryError, match="not on PATH"):
         Summarizer(cc_cfg, db).summarize(Episode(title="T", podcast="P"), transcript(5))
+
+
+def test_model_error_fails_fast(cc_cfg, db, tmp_path, monkeypatch):
+    from podcast_digest.summarize import SummaryError
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    exe = bin_dir / "claude"
+    count = tmp_path / "count"
+    exe.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        f"open({str(count)!r}, 'a').write('x')\n"
+        "print(json.dumps({'is_error': True, 'result': 'There is an issue with the selected "
+        "model (claude-sonnet-4-6). It may not exist or you may not have access to it.'}))\n"
+        "sys.exit(1)\n"
+    )
+    exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    with pytest.raises(SummaryError, match="selected model"):
+        Summarizer(cc_cfg, db).summarize(Episode(title="T", podcast="P"), transcript(5))
+    assert count.read_text() == "x"  # no retries

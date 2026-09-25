@@ -58,7 +58,8 @@ class SummarizationConfig(BaseModel):
     # claude-code: headless Claude Code (`claude -p`) on your Claude subscription.
     backend: Literal["api", "claude-code"] = "api"
     model: str = "claude-sonnet-5"
-    claude_code_model: str = "sonnet"  # alias passed to `claude --model`
+    # Passed to `claude --model` (e.g. claude-sonnet-5); None uses Claude Code's default model.
+    claude_code_model: str | None = None
     claude_code_timeout: int = 1200  # seconds per call
     digest_model: str | None = None  # defaults to `model`
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "medium"
@@ -72,7 +73,7 @@ class SummarizationConfig(BaseModel):
     @property
     def model_label(self) -> str:
         if self.backend == "claude-code":
-            return f"claude-code/{self.claude_code_model}"
+            return f"claude-code/{self.claude_code_model or 'default'}"
         return self.model
 
 

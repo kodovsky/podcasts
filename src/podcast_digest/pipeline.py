@@ -53,7 +53,8 @@ def process_episode(
         return path
     except Exception as e:
         db.set_status(ep.id, "failed", error=f"{type(e).__name__}: {e}")
-        log.exception("✘ Failed: %s", ep.title)
+        log.error("✘ Failed: %s — %s: %s", ep.title, type(e).__name__, e)
+        log.debug("Traceback", exc_info=True)  # full traceback goes to the log file
         raise
 
 
