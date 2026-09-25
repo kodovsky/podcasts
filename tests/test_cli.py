@@ -23,7 +23,7 @@ def test_transcribe_local_file(tmp_path, monkeypatch, capsys):
     assert cli.main(args) == 0
     out = capsys.readouterr().out
     assert "Show — My Ep" in out and "[00:00] Hello and welcome." in out
-    assert list((tmp_path / "data" / "transcripts").glob("*.json"))
+    assert list((tmp_path / "data" / "transcripts" / "Show").glob("* My Ep - *.json"))
 
     # Second run hits the cache: no new transcription.
     assert cli.main(args) == 0
@@ -46,3 +46,36 @@ def test_everything_lives_in_project_folder(tmp_path, monkeypatch):
     import os
 
     assert os.environ["HF_HOME"] == str(project / "data" / "models")
+
+
+def test_storage_layout_and_audio_cleanup(tmp_path, monkeypatch, db, cfg):
+    from datetime import UTC, datetime
+
+    from podcast_digest.models import Episode
+
+    ep = Episode(
+        title="Noam Brown: Agents",
+        podcast="Dwarkesh Podcast",
+        audio_url="https://cdn/x.mp3",
+        published=datetime(2026, 9, 17, tzinfo=UTC),
+    )
+    # Files from the old flat layout get moved into <Podcast>/<date> <title> - <id>.*
+    cfg.audio_dir.mkdir(parents=True)
+    (cfg.audio_dir / f"{ep.id}.mp3").write_bytes(b"audio")
+    cfg.transcripts_dir.mkdir(parents=True)
+    old_t = Transcript([Segment(0, 1, "hi")], source="mlx-whisper")
+    import json
+
+    (cfg.transcripts_dir / f"{ep.id}.json").write_text(json.dumps(old_t.to_dict()))
+
+    stem = f"2026-09-17 Noam Brown Agents - {ep.id}"
+    assert transcribe.transcript_path(ep, cfg) == (
+        cfg.transcripts_dir / "Dwarkesh Podcast" / f"{stem}.json"
+    )
+    assert transcribe._audio_path(ep, cfg) == cfg.audio_dir / "Dwarkesh Podcast" / f"{stem}.mp3"
+    assert not (cfg.audio_dir / f"{ep.id}.mp3").exists()
+
+    # keep_audio: false deletes the downloaded audio once transcribed
+    cfg.transcription.keep_audio = False
+    transcribe._cleanup_audio(ep, cfg)
+    assert not list(cfg.audio_dir.rglob("*.mp3"))

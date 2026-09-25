@@ -19,13 +19,25 @@ git clone https://github.com/kodovsky/podcasts && cd podcasts
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e '.[mac,dev]'               # use '.[local]' for faster-whisper instead
 cp config.example.yaml config.yaml        # set output_dir to your vault + your interests
-export ANTHROPIC_API_KEY=...              # or `ant auth login`
+# Summaries run through Claude Code on your subscription (backend: claude-code in config.yaml):
+# install Claude Code and run `claude` once to log in. For the pay-per-token API instead, set
+# backend: api and export ANTHROPIC_API_KEY=...
 export DEEPGRAM_API_KEY=...               # optional: fallback transcription
 ```
 
-Everything stays in the project folder: notes in `notes/` (point `output_dir` at your
-Obsidian vault when you're ready), and audio, transcripts, the Whisper model (~1.5 GB,
-downloaded on first use), the SQLite state and logs in `data/`. Both are git-ignored.
+Everything stays in the project folder (both `notes/` and `data/` are git-ignored):
+
+```
+notes/                         point output_dir at your Obsidian vault when you're ready
+  <Podcast>/<date> <title>.md
+  <Podcast>/Transcripts/…
+  Digests/
+data/
+  audio/<Podcast>/<date> <title> - <id>.mp3        (keep_audio: false deletes after transcription)
+  transcripts/<Podcast>/<date> <title> - <id>.json
+  models/                      Whisper model (~1.5 GB, downloaded on first use)
+  state.sqlite, logs/
+```
 
 ## First test: one downloaded MP3
 
@@ -69,7 +81,7 @@ Digests/
 |---|---|
 | Resolve | Spotify has no downloadable audio, so Spotify/Apple links are matched to the show's public RSS feed via the iTunes Search API (Spotify exclusives won't resolve). |
 | Transcript | `<podcast:transcript>` from the feed if it's VTT/SRT/JSON (timed) → mlx-whisper (Apple GPU) / faster-whisper → Deepgram fallback. Cached in `data/transcripts/`, so a failed summary never re-transcribes. |
-| Summarize | Claude (`claude-sonnet-5` by default) with structured outputs validated by Pydantic. Transcripts over `max_chunk_tokens` are summarized per chunk (with overlap) and then merged. API errors are retried with backoff by the SDK; truncated/invalid output is retried too. |
+| Summarize | Claude Code on your subscription (`claude -p`, default) or the Claude API (`claude-sonnet-5`) with structured outputs validated by Pydantic. Transcripts over `max_chunk_tokens` are summarized per chunk (with overlap) and then merged. API errors are retried with backoff by the SDK; truncated/invalid output is retried too. |
 | State | `data/state.sqlite`: processed episodes (so nothing is done twice) and a cost ledger. Logs in `data/logs/`. |
 
 ## Triggering from your phone

@@ -20,6 +20,7 @@ transcription:
   engine: auto               # auto | mlx-whisper | faster-whisper | deepgram
   fallback: deepgram         # used if the primary engine fails (needs DEEPGRAM_API_KEY)
   prefer_published: true     # use <podcast:transcript> from the feed when it has timestamps
+  keep_audio: true           # false: delete downloaded MP3s once transcribed (saves disk)
   allow_untimed_published: false
   # language: en
   # mlx_model: mlx-community/whisper-large-v3-turbo
@@ -28,7 +29,11 @@ transcription:
   # deepgram_usd_per_minute: 0.0043
 
 summarization:
-  model: claude-sonnet-5
+  # claude-code: runs `claude -p` on your Claude subscription (no API key needed)
+  # api:         Claude API, pay per token (needs ANTHROPIC_API_KEY)
+  backend: claude-code
+  claude_code_model: sonnet  # sonnet | opus | haiku
+  model: claude-sonnet-5     # used by backend: api
   # digest_model: claude-opus-5
   effort: medium             # low | medium | high | xhigh | max
   max_chunk_tokens: 80000    # longer transcripts are summarized in parts, then merged

@@ -30,6 +30,8 @@ class TranscriptionConfig(BaseModel):
     faster_whisper_compute_type: str = "default"
     deepgram_model: str = "nova-3"
     deepgram_usd_per_minute: float = 0.0043  # check against your Deepgram plan
+    # Delete downloaded audio once transcribed (files you pass in yourself are never deleted).
+    keep_audio: bool = True
     # Use a transcript published in the feed (<podcast:transcript>) when it has timestamps.
     prefer_published: bool = True
     # Also accept published transcripts without timestamps (HTML/plain text).
@@ -52,7 +54,12 @@ DEFAULT_PRICES: dict[str, ModelPrice] = {
 
 
 class SummarizationConfig(BaseModel):
+    # api: Claude API (needs ANTHROPIC_API_KEY, pay per token).
+    # claude-code: headless Claude Code (`claude -p`) on your Claude subscription.
+    backend: Literal["api", "claude-code"] = "api"
     model: str = "claude-sonnet-5"
+    claude_code_model: str = "sonnet"  # alias passed to `claude --model`
+    claude_code_timeout: int = 1200  # seconds per call
     digest_model: str | None = None  # defaults to `model`
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "medium"
     max_output_tokens: int = 16000
@@ -61,6 +68,12 @@ class SummarizationConfig(BaseModel):
     chunk_overlap_seconds: int = 60
     max_retries: int = 5  # SDK retries on 429/5xx/connection errors with backoff
     prices: dict[str, ModelPrice] = Field(default_factory=lambda: dict(DEFAULT_PRICES))
+
+    @property
+    def model_label(self) -> str:
+        if self.backend == "claude-code":
+            return f"claude-code/{self.claude_code_model}"
+        return self.model
 
 
 class OutputConfig(BaseModel):

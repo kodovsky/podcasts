@@ -109,13 +109,13 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "transcribe":
             from .summarize import to_paragraphs
-            from .transcribe import get_transcript
+            from .transcribe import get_transcript, transcript_path
 
             t = get_transcript(episode, cfg, db, engine=args.engine)
             paras = to_paragraphs(t)
             print(f"\n{episode.podcast} — {episode.title}")
             print(f"{t.source} ({t.model}), {len(t.segments)} segments, {t.duration / 60:.0f} min")
-            print(f"Saved: {cfg.transcripts_dir / (episode.id + '.json')}\n")
+            print(f"Saved: {transcript_path(episode, cfg)}\n")
             for _, text in paras[: args.lines]:
                 print(text[:300] + ("…" if len(text) > 300 else ""), "\n")
             print(

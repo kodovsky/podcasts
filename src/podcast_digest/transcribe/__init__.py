@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from ..config import Config
 from ..db import DB
 from ..http import download
-from ..models import Episode, Transcript
+from ..models import Episode, Transcript, storage_name
 from .engines import (
     EngineUnavailable,
     auto_engine,
@@ -23,7 +23,29 @@ from .published import dumps, fetch_published
 
 log = logging.getLogger(__name__)
 
-__all__ = ["get_transcript", "EngineUnavailable"]
+__all__ = ["get_transcript", "transcript_path", "EngineUnavailable"]
+
+
+def _locate(root: Path, ep: Episode, suffix: str) -> Path:
+    """Where an episode's data file lives: <root>/<Podcast>/<date> <title> - <id><suffix>.
+
+    An existing file for this episode id (e.g. from an older flat layout, or saved under a
+    different title) is moved to the current name so the folder stays tidy.
+    """
+    folder, stem = storage_name(ep)
+    target = root / folder / f"{stem}{suffix}"
+    if not target.exists() and root.exists():
+        pattern = f"*{ep.id}{suffix}" if suffix != ".*" else f"*{ep.id}.*"
+        for found in root.rglob(pattern):
+            if found.is_file() and not found.name.endswith(".part"):
+                if suffix == ".*":
+                    target = target.with_name(f"{stem}{found.suffix}")
+                if found != target:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    found.rename(target)
+                    log.info("Moved %s -> %s", found.name, target.relative_to(root))
+                return target
+    return target
 
 
 def _audio_path(ep: Episode, cfg: Config) -> Path:
@@ -31,10 +53,22 @@ def _audio_path(ep: Episode, cfg: Config) -> Path:
         return Path(ep.local_audio)
     if not ep.audio_url:
         raise RuntimeError(f"Episode {ep.title!r} has no audio URL")
+    existing = _locate(cfg.audio_dir, ep, ".*")
+    if existing.exists():
+        return existing
     ext = Path(urlparse(ep.audio_url).path).suffix.lower() or ".mp3"
     if len(ext) > 6:
         ext = ".mp3"
-    return download(ep.audio_url, cfg.audio_dir / f"{ep.id}{ext}")
+    return download(ep.audio_url, existing.with_suffix(ext))
+
+
+def _cleanup_audio(ep: Episode, cfg: Config) -> None:
+    if cfg.transcription.keep_audio or ep.local_audio:
+        return
+    audio = _locate(cfg.audio_dir, ep, ".*")
+    if audio.exists():
+        audio.unlink()
+        log.info("Deleted audio %s (keep_audio: false)", audio.name)
 
 
 def _use_project_model_cache(cfg: Config) -> None:
@@ -63,8 +97,12 @@ def _run_engine(engine: str, ep: Episode, cfg: Config) -> Transcript:
     raise ValueError(f"Unknown engine {engine}")
 
 
+def transcript_path(ep: Episode, cfg: Config) -> Path:
+    return _locate(cfg.transcripts_dir, ep, ".json")
+
+
 def get_transcript(ep: Episode, cfg: Config, db: DB, engine: str | None = None) -> Transcript:
-    cache = cfg.transcripts_dir / f"{ep.id}.json"
+    cache = transcript_path(ep, cfg)
     if cache.exists():
         log.info("Using cached transcript %s", cache)
         return Transcript.from_dict(json.loads(cache.read_text()))
@@ -101,4 +139,5 @@ def get_transcript(ep: Episode, cfg: Config, db: DB, engine: str | None = None) 
         )
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(dumps(transcript))
+    _cleanup_audio(ep, cfg)
     return transcript

@@ -46,7 +46,7 @@ def process_episode(
         summary = summarizer.summarize(ep, transcript)
         total_cost = db.episode_cost(ep.id)
         path = write_episode_notes(
-            ep, summary, transcript, cfg, model=cfg.summarization.model, cost_usd=total_cost
+            ep, summary, transcript, cfg, model=cfg.summarization.model_label, cost_usd=total_cost
         )
         db.set_status(ep.id, "done", note_path=str(path), summary_json=summary.model_dump_json())
         log.info("✔ Wrote %s (episode cost $%.4f)", path, total_cost)

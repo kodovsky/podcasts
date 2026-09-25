@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import time
 from dataclasses import dataclass
 from typing import Literal, TypeVar
 
@@ -210,7 +216,9 @@ class Summarizer:
         self.cfg = cfg
         self.db = db
         self.sc = cfg.summarization
-        self.client = client or anthropic.Anthropic(max_retries=self.sc.max_retries)
+        self.client = client
+        if self.client is None and self.sc.backend == "api":
+            self.client = anthropic.Anthropic(max_retries=self.sc.max_retries)
         self.usage = Usage()
 
     def _cost(self, model: str, u) -> float:
@@ -238,13 +246,18 @@ class Summarizer:
         model: str | None = None,
     ) -> T:
         model = model or self.sc.model
-
-        @retry(
+        retrying = retry(
             retry=retry_if_exception_type(_RetryableOutput),
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=2, max=20),
             reraise=True,
         )
+        if self.sc.backend == "claude-code":
+            return retrying(self._call_claude_code)(
+                system, prompt, output_format, stage, episode_id
+            )
+
+        @retrying
         def attempt() -> T:
             kwargs = {}
             if self.sc.effort:
@@ -296,6 +309,86 @@ class Summarizer:
             return attempt()
         except ValidationError as e:  # schema mismatch surfaced by the SDK parser
             raise SummaryError(f"Invalid structured output ({stage}): {e}") from e
+
+    def _call_claude_code(
+        self, system: str, prompt: str, output_format: type[T], stage: str, episode_id: str | None
+    ) -> T:
+        """One structured call through headless Claude Code, billed to the Claude subscription."""
+        exe = shutil.which("claude")
+        if not exe:
+            raise SummaryError(
+                "Claude Code ('claude') is not on PATH. Install it and run `claude` once to log "
+                "in, or set summarization.backend: api."
+            )
+        cmd = [
+            exe,
+            "-p",
+            CLAUDE_CODE_INSTRUCTION,
+            "--output-format",
+            "json",
+            "--json-schema",
+            json.dumps(output_format.model_json_schema()),
+            "--model",
+            self.sc.claude_code_model,
+            "--permission-mode",
+            "dontAsk",
+        ]
+        # Without ANTHROPIC_API_KEY, `claude -p` uses the subscription login instead of the API.
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        t0 = time.time()
+        # Run from an empty folder so this repo's CLAUDE.md / settings don't steer the call.
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    input=f"{system}\n\n{prompt}",
+                    capture_output=True,
+                    text=True,
+                    cwd=tmp,
+                    env=env,
+                    timeout=self.sc.claude_code_timeout,
+                )
+            except subprocess.TimeoutExpired as e:
+                raise _RetryableOutput(f"claude -p timed out after {e.timeout}s") from e
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout).strip()[-800:]
+            raise _RetryableOutput(f"claude -p exited {proc.returncode}: {detail}")
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            raise _RetryableOutput(f"claude -p returned non-JSON: {proc.stdout[:300]}") from e
+        if data.get("is_error"):
+            raise _RetryableOutput(f"claude -p error: {data.get('result') or data}")
+
+        raw = data.get("structured_output")
+        if raw is None:  # fall back to JSON in the text result
+            raw = _extract_json(data.get("result") or "")
+        try:
+            parsed = output_format.model_validate(raw)
+        except ValidationError as e:
+            raise _RetryableOutput(f"Output didn't match the schema: {e}") from e
+
+        usage = data.get("usage") or {}
+        estimate = float(data.get("total_cost_usd") or 0.0)
+        self.db.log_cost(
+            episode_id=episode_id,
+            stage=stage,
+            provider="claude-code",
+            model=self.sc.claude_code_model,
+            cost_usd=0.0,  # covered by the subscription
+            input_tokens=int(usage.get("input_tokens") or 0),
+            output_tokens=int(usage.get("output_tokens") or 0),
+            cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
+            cache_write_tokens=int(usage.get("cache_creation_input_tokens") or 0),
+        )
+        log.info(
+            "Claude Code (%s) [%s]: done in %.0fs on your subscription (API-equivalent ~$%.3f)",
+            self.sc.claude_code_model,
+            stage,
+            time.time() - t0,
+            estimate,
+        )
+        return parsed
 
     def summarize(self, ep: Episode, transcript: Transcript) -> EpisodeSummary:
         interests = self.cfg.interests or ["General self-improvement"]
@@ -359,9 +452,24 @@ class Summarizer:
         )
 
 
+CLAUDE_CODE_INSTRUCTION = (
+    "The piped input contains your instructions followed by the material to process. "
+    "Follow them. Do not use any tools; answer only with the structured output."
+)
+
+
+def _extract_json(text: str) -> object:
+    """Parse JSON from a text reply, tolerating ```json fences or surrounding prose."""
+    m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
+    candidate = m.group(1) if m else text[text.find("{") : text.rfind("}") + 1]
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError as e:
+        raise _RetryableOutput(f"No JSON in claude -p result: {text[:300]}") from e
+
+
 def _strip_html(s: str) -> str:
     import html
-    import re
 
     return html.unescape(re.sub(r"<[^>]+>", " ", s)).strip()
 

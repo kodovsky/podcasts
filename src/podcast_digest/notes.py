@@ -9,15 +9,8 @@ from pathlib import Path
 import yaml
 
 from .config import Config
-from .models import Episode, Transcript, fmt_ts
+from .models import Episode, Transcript, episode_date, fmt_ts, safe_filename
 from .summarize import EpisodeSummary, to_paragraphs
-
-
-def safe_filename(name: str, max_len: int = 120) -> str:
-    """Strip characters that break file systems or Obsidian links."""
-    name = re.sub(r'[\\/:*?"<>|#^\[\]]', " ", name)
-    name = re.sub(r"\s+", " ", name).strip(" .")
-    return name[:max_len].rstrip(" .") or "Untitled"
 
 
 def slug(s: str) -> str:
@@ -34,10 +27,7 @@ def _frontmatter(data: dict) -> str:
 
 
 def note_basename(ep: Episode) -> str:
-    # Local files have no publish date; fall back to the day they were processed.
-    day = ep.published or datetime.now(UTC)
-    date = day.date().isoformat()
-    return safe_filename(f"{date} {ep.title}")
+    return safe_filename(f"{episode_date(ep)} {ep.title}")
 
 
 def episode_dir(cfg: Config, ep: Episode) -> Path:

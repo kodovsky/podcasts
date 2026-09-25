@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 @dataclass
@@ -86,3 +87,23 @@ def fmt_ts(seconds: float) -> str:
     h, rem = divmod(s, 3600)
     m, sec = divmod(rem, 60)
     return f"{h}:{m:02d}:{sec:02d}" if h else f"{m:02d}:{sec:02d}"
+
+
+def safe_filename(name: str, max_len: int = 120) -> str:
+    """Strip characters that break file systems or Obsidian links."""
+    name = re.sub(r'[\\/:*?"<>|#^\[\]]', " ", name)
+    name = re.sub(r"\s+", " ", name).strip(" .")
+    return name[:max_len].rstrip(" .") or "Untitled"
+
+
+def episode_date(ep: Episode) -> str:
+    """Publish date, or today for local files that have none."""
+    return (ep.published or datetime.now(UTC)).date().isoformat()
+
+
+def storage_name(ep: Episode) -> tuple[str, str]:
+    """(podcast folder, file stem) for data files: 'Show', '2026-09-17 Title - <id>'.
+
+    The id suffix keeps names unique and lets lookups find a file even if the title changes.
+    """
+    return safe_filename(ep.podcast), f"{episode_date(ep)} {safe_filename(ep.title, 80)} - {ep.id}"
