@@ -36,19 +36,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    ep = sub.add_parser(
-        "episode",
-        help="Process one episode from a Spotify/Apple/RSS/audio URL or local file",
-    )
-    ep.add_argument(
+    # Arguments shared by `episode` and `transcribe`.
+    target = argparse.ArgumentParser(add_help=False)
+    target.add_argument(
         "target",
         help="Spotify or Apple Podcasts episode link, RSS feed URL, audio URL, or local audio file",
     )
-    ep.add_argument("--match", help="With an RSS feed URL: pick the episode whose title matches")
-    ep.add_argument(
+    target.add_argument(
+        "--match", help="With an RSS feed URL: pick the episode whose title matches"
+    )
+    target.add_argument(
         "--engine",
         choices=["mlx-whisper", "faster-whisper", "deepgram"],
         help="Force a transcription engine (skips published transcripts)",
+    )
+    target.add_argument("--title", help="Episode title (useful for local files)")
+    target.add_argument("--podcast", help="Podcast name (useful for local files)")
+
+    ep = sub.add_parser(
+        "episode",
+        parents=[target],
+        help="Transcribe + summarize one episode and write its note",
     )
     ep.add_argument("--force", action="store_true", help="Reprocess even if already done")
     ep.add_argument(
@@ -56,6 +64,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Only resolve the link and show what would be processed",
     )
+
+    tr = sub.add_parser(
+        "transcribe",
+        parents=[target],
+        help="Only transcribe (free, local) and preview the result; no Claude call",
+    )
+    tr.add_argument("--lines", type=int, default=8, help="Paragraphs to preview")
 
     sub.add_parser("run", help="Process new episodes from all feeds in the config")
 
@@ -78,8 +93,7 @@ def main(argv: list[str] | None = None) -> int:
 
     db = DB(cfg.db_path)
     try:
-        if args.command == "episode":
-            from .pipeline import process_episode
+        if args.command in ("episode", "transcribe"):
             from .resolve import ResolveError, resolve
 
             try:
@@ -90,6 +104,26 @@ def main(argv: list[str] | None = None) -> int:
             except httpx.HTTPError as e:
                 log.error("Network error while resolving %s: %s", args.target, e)
                 return 2
+            episode.title = args.title or episode.title
+            episode.podcast = args.podcast or episode.podcast
+
+        if args.command == "transcribe":
+            from .summarize import to_paragraphs
+            from .transcribe import get_transcript
+
+            t = get_transcript(episode, cfg, db, engine=args.engine)
+            paras = to_paragraphs(t)
+            print(f"\n{episode.podcast} — {episode.title}")
+            print(f"{t.source} ({t.model}), {len(t.segments)} segments, {t.duration / 60:.0f} min")
+            print(f"Saved: {cfg.transcripts_dir / (episode.id + '.json')}\n")
+            for _, text in paras[: args.lines]:
+                print(text[:300] + ("…" if len(text) > 300 else ""), "\n")
+            print(
+                "Next: podcast-digest episode <same file/link and --title/--podcast> to summarize"
+            )
+        elif args.command == "episode":
+            from .pipeline import process_episode
+
             if args.dry_run:
                 print(f"{episode.podcast} — {episode.title}")
                 print(f"  published: {episode.published}  audio: {episode.audio_url}")

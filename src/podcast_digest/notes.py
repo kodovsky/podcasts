@@ -34,7 +34,9 @@ def _frontmatter(data: dict) -> str:
 
 
 def note_basename(ep: Episode) -> str:
-    date = ep.published.date().isoformat() if ep.published else "undated"
+    # Local files have no publish date; fall back to the day they were processed.
+    day = ep.published or datetime.now(UTC)
+    date = day.date().isoformat()
     return safe_filename(f"{date} {ep.title}")
 
 

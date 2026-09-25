@@ -25,6 +25,17 @@ export DEEPGRAM_API_KEY=...               # optional: fallback transcription
 
 The first transcription downloads the Whisper model (~1.5 GB) from Hugging Face.
 
+## First test: one downloaded MP3
+
+```bash
+# 1. Transcribe only (free, runs locally, no API key needed). Check the preview.
+podcast-digest transcribe ~/Downloads/episode.mp3 --title "Episode title" --podcast "The Tim Ferriss Show"
+
+# 2. Summarize + write the note (reuses the cached transcript; a few cents of Claude usage)
+podcast-digest episode ~/Downloads/episode.mp3 --title "Episode title" --podcast "The Tim Ferriss Show"
+podcast-digest costs
+```
+
 ## Usage
 
 ```bash
