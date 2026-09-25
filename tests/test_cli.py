@@ -28,3 +28,21 @@ def test_transcribe_local_file(tmp_path, monkeypatch, capsys):
     # Second run hits the cache: no new transcription.
     assert cli.main(args) == 0
     assert calls == ["mlx-whisper"]
+
+
+def test_everything_lives_in_project_folder(tmp_path, monkeypatch):
+    from podcast_digest.config import load_config
+
+    project = tmp_path / "podcasts"
+    project.mkdir()
+    (project / "config.yaml").write_text("interests: [x]\n")
+    monkeypatch.chdir(tmp_path)  # paths must resolve against the config, not the CWD
+    cfg = load_config(project / "config.yaml")
+    assert cfg.output_dir == project / "notes"
+    assert cfg.models_dir == project / "data" / "models"
+
+    monkeypatch.setenv("HF_HOME", "/elsewhere")
+    transcribe._use_project_model_cache(cfg)
+    import os
+
+    assert os.environ["HF_HOME"] == str(project / "data" / "models")

@@ -23,7 +23,9 @@ export ANTHROPIC_API_KEY=...              # or `ant auth login`
 export DEEPGRAM_API_KEY=...               # optional: fallback transcription
 ```
 
-The first transcription downloads the Whisper model (~1.5 GB) from Hugging Face.
+Everything stays in the project folder: notes in `notes/` (point `output_dir` at your
+Obsidian vault when you're ready), and audio, transcripts, the Whisper model (~1.5 GB,
+downloaded on first use), the SQLite state and logs in `data/`. Both are git-ignored.
 
 ## First test: one downloaded MP3
 

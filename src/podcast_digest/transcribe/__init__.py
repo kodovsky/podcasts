@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -36,8 +37,19 @@ def _audio_path(ep: Episode, cfg: Config) -> Path:
     return download(ep.audio_url, cfg.audio_dir / f"{ep.id}{ext}")
 
 
+def _use_project_model_cache(cfg: Config) -> None:
+    """Point Hugging Face downloads (Whisper weights) at data/models instead of ~/.cache.
+
+    Must run before mlx_whisper / faster_whisper import huggingface_hub, which reads HF_HOME
+    at import time; the engines import them lazily, so doing it here is early enough.
+    """
+    cfg.models_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HOME"] = str(cfg.models_dir)
+
+
 def _run_engine(engine: str, ep: Episode, cfg: Config) -> Transcript:
     tc = cfg.transcription
+    _use_project_model_cache(cfg)
     if engine == "deepgram":
         # Remote audio: Deepgram fetches it directly, no local download needed.
         if ep.audio_url and not ep.local_audio:

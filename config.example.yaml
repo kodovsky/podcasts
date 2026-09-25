@@ -1,6 +1,7 @@
 # Copy to config.yaml (git-ignored) and edit.
-output_dir: ~/Obsidian/Vault/Podcasts   # <Podcast>/<date> <title>.md, Transcripts/, Digests/
-data_dir: ./data                         # SQLite state, audio cache, transcripts, logs
+# Relative paths are inside the project folder (next to this file).
+output_dir: ./notes     # <Podcast>/<date> <title>.md, Transcripts/, Digests/ (or your vault path)
+data_dir: ./data        # audio, transcripts, Whisper models, SQLite state, logs
 
 # Used by `podcast-digest run` (new episodes since last run) and `podcast-digest list`.
 feeds:

@@ -70,7 +70,7 @@ class OutputConfig(BaseModel):
 
 
 class Config(BaseModel):
-    output_dir: Path
+    output_dir: Path = Path("./notes")
     data_dir: Path = Path("./data")
     feeds: list[FeedConfig] = Field(default_factory=list)
     interests: list[str] = Field(default_factory=list)
@@ -99,6 +99,11 @@ class Config(BaseModel):
     def log_dir(self) -> Path:
         return self.data_dir / "logs"
 
+    @property
+    def models_dir(self) -> Path:
+        """Whisper model downloads (Hugging Face cache), kept inside the project."""
+        return self.data_dir / "models"
+
     def price_for(self, model: str) -> ModelPrice | None:
         return self.summarization.prices.get(model)
 
@@ -111,7 +116,9 @@ def load_config(path: str | Path) -> Config:
         )
     raw = yaml.safe_load(path.read_text()) or {}
     cfg = Config.model_validate(raw)
-    # Relative data_dir is resolved against the config file's folder, not the CWD.
+    # Relative paths are resolved against the config file's folder, not the CWD.
     if not cfg.data_dir.is_absolute():
         cfg.data_dir = (path.parent / cfg.data_dir).resolve()
+    if not cfg.output_dir.is_absolute():
+        cfg.output_dir = (path.parent / cfg.output_dir).resolve()
     return cfg
