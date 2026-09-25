@@ -23,7 +23,7 @@ def _setup_logging(log_dir: Path, verbose: bool) -> None:
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
     root.addHandler(file_handler)
     root.addHandler(console)
-    for noisy in ("httpx", "httpcore", "anthropic"):
+    for noisy in ("httpx", "httpcore", "anthropic", "huggingface_hub", "filelock", "urllib3"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 

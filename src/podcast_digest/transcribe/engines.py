@@ -51,8 +51,9 @@ def transcribe_mlx(audio: Path, cfg: TranscriptionConfig) -> Transcript:
 
     log.info("Transcribing with mlx-whisper (%s) on the Apple GPU…", cfg.mlx_model)
     t0 = time.time()
+    # verbose=False shows a progress bar (None is fully silent, True prints every line).
     result = mlx_whisper.transcribe(
-        str(audio), path_or_hf_repo=cfg.mlx_model, language=cfg.language, verbose=None
+        str(audio), path_or_hf_repo=cfg.mlx_model, language=cfg.language, verbose=False
     )
     segments = [
         Segment(start=float(s["start"]), end=float(s["end"]), text=s["text"].strip())
